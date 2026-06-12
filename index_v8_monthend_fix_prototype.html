@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>保育園シフト管理 v5 試作</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#1e3a5f;--navy2:#2a5298;--accent:#e8f0fe;--border:#dde3f0;--text:#1a1a2e;--muted:#6b7280;--bg:#f4f6fb;--white:#fff;--red:#dc2626;--green:#16a34a;--amber:#d97706}
+body{font-family:'Hiragino Sans','Yu Gothic',sans-serif;font-size:14px;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* LOGIN */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#1e3a5f 0%,#2a5298 100%)}
+.login-box{background:var(--white);border-radius:16px;padding:40px 36px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,.18)}
+.login-box h1{font-size:20px;font-weight:600;color:var(--navy);margin-bottom:6px;text-align:center}
+.login-box p{font-size:12px;color:var(--muted);text-align:center;margin-bottom:28px}
+.login-box label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px;margin-top:12px}
+.login-box input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px}
+.btn-primary{width:100%;margin-top:20px;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:500}
+.btn-primary:hover{background:var(--navy2)}
+.login-err{color:var(--red);font-size:12px;margin-top:8px;text-align:center}
+
+/* APP */
+#app{display:none}
+.header{background:var(--navy);color:#fff;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100}
+.header h1{font-size:16px;font-weight:500}
+.header-right{display:flex;align-items:center;gap:12px;font-size:12px}
+.header-right button{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}
+
+.tabs{display:flex;gap:2px;padding:0 16px;background:var(--white);border-bottom:1px solid var(--border);overflow-x:auto}
+.tab{padding:12px 16px;cursor:pointer;border:none;background:none;font-size:13px;color:var(--muted);white-space:nowrap;border-bottom:2px solid transparent}
+.tab.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:500}
+
+.content{padding:16px;max-width:1300px;margin:0 auto}
+.card{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+.card-title{font-size:14px;font-weight:500;margin-bottom:14px;color:var(--navy)}
+
+/* GRID */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+
+/* FORM */
+label.fl{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
+input.fi,select.fi{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--white);color:var(--text)}
+input.fi:focus,select.fi:focus{outline:none;border-color:var(--navy2)}
+
+/* BUTTONS */
+.btn{padding:7px 14px;border-radius:7px;border:1px solid var(--border);background:var(--white);cursor:pointer;font-size:13px;color:var(--text)}
+.btn:hover{background:var(--accent)}
+.btn-blue{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn-blue:hover{background:var(--navy2)}
+.btn-red{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-sm{padding:3px 8px;font-size:11px}
+.btn-green{background:var(--green);color:#fff;border-color:var(--green)}
+.btn-amber{background:var(--amber);color:#fff;border-color:var(--amber)}
+.btn-amber{background:var(--amber);color:#fff;border-color:var(--amber)}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:500}
+.b-early{background:#dbeafe;color:#1e40af}
+.b-late{background:#fef3c7;color:#92400e}
+.b-off{background:#fee2e2;color:#991b1b}
+.b-hol{background:#f3f4f6;color:#6b7280}
+.b-part{background:#dcfce7;color:#166534}
+.b-full{background:#ede9fe;color:#4c1d95}
+.b-reemp{background:#dbeafe;color:#1e40af}
+.b-cls{background:#e0f2fe;color:#0c4a6e;font-size:10px;padding:1px 6px}
+
+/* STATS */
+.stat-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.stat{background:var(--accent);border-radius:10px;padding:12px 16px;text-align:center;min-width:80px}
+.stat-n{font-size:22px;font-weight:600;color:var(--navy)}
+.stat-l{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;font-size:11px;white-space:nowrap}
+th{background:#f0f4ff;padding:5px 4px;text-align:center;border:1px solid var(--border);font-weight:500;font-size:10px;position:sticky;top:0;z-index:2}
+th.sname{position:sticky;left:0;z-index:3;background:#e8eef8;min-width:80px}
+th.scls{position:sticky;left:80px;z-index:3;background:#e8eef8;min-width:60px}
+td{padding:3px 2px;border:1px solid var(--border);text-align:center;vertical-align:middle}
+td.sname{position:sticky;left:0;background:var(--white);font-size:11px;text-align:left;padding-left:6px;z-index:1;min-width:80px}
+td.scls{position:sticky;left:80px;background:var(--white);z-index:1;min-width:60px}
+td.sat{background:#f0f4ff}
+td.sun,td.hol{background:#fff0f0}
+.sc{cursor:pointer;border-radius:4px;padding:2px 3px;font-size:10px;display:inline-block;min-width:24px}
+.se{background:#dbeafe;color:#1e40af}
+.sl{background:#fef3c7;color:#92400e}
+.sn{background:#dcfce7;color:#166534}
+.so{background:#fee2e2;color:#991b1b}
+.sh{background:#f3f4f6;color:#9ca3af}
+
+/* ALERT */
+.alert{border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:12px}
+.alert-warn{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.alert-info{background:#eff6ff;border:1px solid #93c5fd;color:#1e40af}
+.alert-ok{background:#f0fdf4;border:1px solid #86efac;color:#166534}
+
+/* SWAP */
+.swap-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px}
+.swap-status{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px}
+.ss-pending{background:#fef3c7;color:#92400e}
+.ss-approved{background:#dcfce7;color:#166534}
+.ss-rejected{background:#fee2e2;color:#991b1b}
+
+/* STAFF ROW */
+.staff-item{display:flex;align-items:center;gap:8px;padding:10px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.staff-item:last-child{border-bottom:none}
+
+/* PRINT */
+@media print{
+  .header,.tabs,.no-print{display:none!important}
+  .content{padding:0}
+  .tbl-wrap{overflow:visible}
+  table{font-size:9px}
+  th,td{padding:3px 2px}
+  body{background:#fff}
+}
+
+/* MOBILE */
+@media(max-width:600px){
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .content{padding:10px}
+  .card{padding:12px}
+  .stat-n{font-size:18px}
+}
+
+.hidden{display:none!important}
+.loading{text-align:center;padding:40px;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.dot-green{background:var(--green)}
+.dot-red{background:var(--red)}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>🏫 保育園シフト管理 v5 試作版</h1>
+    <p>メールアドレスとパスワードでログイン</p>
+    <label class="fl">メールアドレス</label>
+    <input class="fi" type="email" id="l-email" placeholder="example@email.com">
+    <label class="fl">パスワード</label>
+    <input class="fi" type="password" id="l-pass" placeholder="パスワード">
+    <button class="btn-primary" onclick="doLogin()">ログイン</button>
+    <div class="login-err hidden" id="login-err"></div>
+    <div style="margin-top:14px;text-align:center">
+      <a href="#" onclick="showRegister()" style="font-size:12px;color:var(--navy2)">初回登録はこちら</a>
+    </div>
+    <div id="register-area" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">新規アカウント登録</p>
+      <label class="fl">氏名</label>
+      <input class="fi" type="text" id="r-name" placeholder="山田 花子">
+      <label class="fl" style="margin-top:8px">メールアドレス</label>
+      <input class="fi" type="email" id="r-email">
+      <label class="fl" style="margin-top:8px">パスワード（6文字以上）</label>
+      <input class="fi" type="password" id="r-pass">
+      <button class="btn-primary" onclick="doRegister()">登録</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="header">
+    <h1>🏫 <span id="garden-name">保育園シフト管理</span> <span style="font-size:11px;opacity:.8">v2試作</span></h1>
+    <div class="header-right">
+      <span><span class="dot dot-green"></span><span id="user-name">ユーザー</span></span>
+      <span id="role-badge" style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:99px;font-size:11px"></span>
+      <button onclick="doLogout()">ログアウト</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('shift')">📅 シフト表</button>
+    <button class="tab" onclick="showTab('staff')">👥 職員</button>
+    <button class="tab" onclick="showTab('request')">📝 希望休</button>
+    <button class="tab" onclick="showTab('swap')">🔄 シフト交換</button>
+    <button class="tab admin-only hidden" onclick="showTab('settings')">⚙️ 設定</button>
+  </div>
+
+  <!-- SHIFT TAB -->
+  <div id="tab-shift" class="content">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px" class="no-print">
+      <button class="btn" onclick="prevMonth()">◀</button>
+      <strong id="month-label" style="min-width:100px;text-align:center;font-size:15px"></strong>
+      <button class="btn" onclick="nextMonth()">▶</button>
+      <select class="fi" id="cls-filter" style="width:130px" onchange="renderShift()">
+        <option value="all">全クラス</option>
+        <option value="0">0歳児</option>
+        <option value="1">1歳児</option>
+        <option value="2">2歳児</option>
+        <option value="3">3歳児</option>
+        <option value="4">4歳児</option>
+        <option value="5">5歳児</option>
+        <option value="staff">フリー/管理</option>
+      </select>
+      <button class="btn btn-blue admin-only hidden" onclick="autoAssign()">🔁 自動生成</button>
+      <button class="btn btn-green" onclick="exportExcel()">📊 Excel出力</button>
+      <button class="btn" onclick="window.print()">🖨 印刷</button>
+    </div>
+    <div id="shift-stats" class="stat-row"></div>
+    <div id="shift-alerts"></div>
+    <div class="tbl-wrap">
+      <table id="shift-table"></table>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted)" class="no-print">
+      <span class="sc sn">通</span> 通常 9:00-18:00　
+      <span class="sc se">早</span> 早出 7:00-16:00　
+      <span class="sc sl">遅</span> 遅出 10:30-20:00　
+      <span class="sc so">休</span> 希望休　
+      <span class="sc sh">－</span> 休日/祝日
+      <span style="margin-left:12px;color:var(--navy2)">※管理者はセルをタップでシフト変更可</span>
+    </div>
+  </div>
+
+  <!-- STAFF TAB -->
+  <div id="tab-staff" class="content hidden">
+    <div class="card admin-only hidden" id="add-staff-card">
+      <div class="card-title">職員を追加</div>
+      <div class="g3">
+        <div><label class="fl">氏名</label><input class="fi" id="s-name" placeholder="山田 花子"></div>
+        <div><label class="fl">クラス</label>
+          <select class="fi" id="s-cls">
+            <option value="0">0歳児クラス</option>
+            <option value="1">1歳児クラス</option>
+            <option value="2">2歳児クラス</option>
+            <option value="3">3歳児クラス</option>
+            <option value="4">4歳児クラス</option>
+            <option value="5">5歳児クラス</option>
+            <option value="staff">フリー/管理</option>
+          </select>
+        </div>
+        <div><label class="fl">職種</label>
+          <select class="fi" id="s-type">
+            <option value="full">正職員</option>
+            <option value="reemploy">再雇用</option>
+            <option value="part">パート</option>
+          </select>
+        </div>
+      </div>
+      <div class="g3" style="margin-top:10px">
+        <div><label class="fl">役職</label>
+          <select class="fi" id="s-role">
+            <option value="teacher">担任</option>
+            <option value="sub">副担任</option>
+            <option value="director">主任</option>
+            <option value="support">補助</option>
+          </select>
+        </div>
+        <div><label class="fl">シフト制約</label>
+          <select class="fi" id="s-shift">
+            <option value="both">通常・早・遅すべて可</option>
+            <option value="normal">通常出のみ</option>
+            <option value="early">早出専門/早出のみ</option>
+            <option value="late">遅出専門/遅出のみ</option>
+            <option value="early_normal">早出＋通常のみ（遅出なし）</option>
+          </select>
+        </div>
+        <div><label class="fl">ログイン用メール（任意）</label><input class="fi" id="s-email" placeholder="staff@example.com"></div>
+      </div>
+      <div class="g3" style="margin-top:10px">
+        <div><label class="fl">月間契約時間</label><input class="fi" type="number" id="s-hours" value="160" min="20" max="220"></div>
+        <div><label class="fl">保育士資格</label>
+          <select class="fi" id="s-license">
+            <option value="licensed">あり（保育士）</option>
+            <option value="support">なし（補助）</option>
+          </select>
+        </div>
+        <div><label class="fl">土曜勤務</label>
+          <select class="fi" id="s-sat">
+            <option value="yes">可</option>
+            <option value="no">不可</option>
+          </select>
+        </div>
+      </div>
+      <div class="g3" style="margin-top:10px">
+        <div><label class="fl">土曜上限/月</label><input class="fi" type="number" id="s-satmax" value="2" min="0" max="5"></div>
+        <div><label class="fl">土曜連続上限</label><input class="fi" type="number" id="s-satstreak" value="2" min="1" max="4"></div>
+        <div><label class="fl">勤務曜日</label><input class="fi" id="s-weekdays" value="1,2,3,4,5,6" title="月=1 火=2 水=3 木=4 金=5 土=6"></div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-blue" onclick="addStaff()">＋ 追加</button>
+        <button class="btn btn-amber" onclick="seedSampleStaff()">30人サンプル再作成</button>
+      </div>
+    </div>
+    <div id="staff-list"></div>
+  </div>
+
+  <!-- REQUEST TAB -->
+  <div id="tab-request" class="content hidden">
+    <div class="card">
+      <div class="card-title">希望休を申請</div>
+      <div class="g3">
+        <div><label class="fl">職員</label>
+          <select class="fi" id="req-staff"></select>
+        </div>
+        <div><label class="fl">日付</label>
+          <input class="fi" type="date" id="req-date">
+        </div>
+        <div><label class="fl">備考</label>
+          <input class="fi" id="req-note" placeholder="私用・通院など">
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-blue" onclick="addRequest()">申請する</button>
+      </div>
+    </div>
+    <div id="request-list"></div>
+  </div>
+
+  <!-- SWAP TAB -->
+  <div id="tab-swap" class="content hidden">
+    <div class="card">
+      <div class="card-title">シフト交換を申請</div>
+      <div class="alert alert-info">自分のシフトと交換したい日・相手を選んで申請してください。管理者が承認すると反映されます。</div>
+      <div class="g2">
+        <div><label class="fl">自分の日付</label><input class="fi" type="date" id="sw-mydate"></div>
+        <div><label class="fl">交換相手</label><select class="fi" id="sw-partner"></select></div>
+      </div>
+      <div class="g2" style="margin-top:10px">
+        <div><label class="fl">相手の日付</label><input class="fi" type="date" id="sw-partdate"></div>
+        <div><label class="fl">理由</label><input class="fi" id="sw-reason" placeholder="家庭の事情など"></div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-blue" onclick="submitSwap()">交換申請する</button>
+      </div>
+    </div>
+    <div id="swap-list"></div>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div id="tab-settings" class="content hidden admin-only">
+    <div class="card">
+      <div class="card-title">基本設定</div>
+      <div class="g2">
+        <div><label class="fl">保育園名</label><input class="fi" id="cfg-gname" value="さくら保育園"></div>
+        <div><label class="fl">管理者メール</label><input class="fi" id="cfg-admin" placeholder="admin@example.com"></div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-blue" onclick="saveConfig()">保存</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">祝日設定（追加・削除可）</div>
+      <div id="holiday-list" style="max-height:280px;overflow-y:auto"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <input type="date" id="hol-date" class="fi" style="width:150px">
+        <input type="text" id="hol-name" class="fi" placeholder="祝日名" style="width:120px">
+        <button class="btn btn-blue" onclick="addHoliday()">追加</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">ユーザー管理</div>
+      <div class="alert alert-info">職員のメールアドレスを登録すると、その職員が自分のシフト確認・希望休申請ができます。管理者権限の付与もここで行います。</div>
+      <div id="user-mgmt-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== FIREBASE CONFIG =====
+const firebaseConfig = {
+  apiKey: "AIzaSyCOduZqnhud4w4g6fSBo304C3omHPX8RlA",
+  authDomain: "hoikuen-shift.firebaseapp.com",
+  projectId: "hoikuen-shift",
+  storageBucket: "hoikuen-shift.firebasestorage.app",
+  messagingSenderId: "57880708454",
+  appId: "1:57880708454:web:7e7ec2df45b4b0e4b5f4a7"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ===== STATE =====
+const CLASSES = ['0歳児','1歳児','2歳児','3歳児','4歳児','5歳児'];
+const DOW = ['日','月','火','水','木','金','土'];
+let currentUser = null;
+let isAdmin = false;
+let staffList = [];
+let shifts = {};      // {dateStr: {staffId: 'E'|'L'|'O'|'H'}}
+let requests = [];
+let holidays = [];
+let swapRequests = [];
+let config = {gardenName:'さくら保育園', adminEmails:[]};
+let curYear = new Date().getFullYear();
+let curMonth = new Date().getMonth();
+
+// ===== DEFAULT HOLIDAYS =====
+const DEFAULT_HOLIDAYS = [
+  {date:'2025-01-01',name:'元日'},{date:'2025-01-13',name:'成人の日'},
+  {date:'2025-02-11',name:'建国記念の日'},{date:'2025-02-23',name:'天皇誕生日'},
+  {date:'2025-02-24',name:'天皇誕生日振替'},{date:'2025-03-20',name:'春分の日'},
+  {date:'2025-04-29',name:'昭和の日'},{date:'2025-05-03',name:'憲法記念日'},
+  {date:'2025-05-04',name:'みどりの日'},{date:'2025-05-05',name:'こどもの日'},
+  {date:'2025-05-06',name:'こどもの日振替'},{date:'2025-07-21',name:'海の日'},
+  {date:'2025-08-11',name:'山の日'},{date:'2025-09-15',name:'敬老の日'},
+  {date:'2025-09-23',name:'秋分の日'},{date:'2025-10-13',name:'スポーツの日'},
+  {date:'2025-11-03',name:'文化の日'},{date:'2025-11-23',name:'勤労感謝の日'},
+  {date:'2025-12-23',name:'天皇誕生日'},
+  {date:'2026-01-01',name:'元日'},{date:'2026-01-12',name:'成人の日'},
+  {date:'2026-02-11',name:'建国記念の日'},{date:'2026-02-23',name:'天皇誕生日'},
+  {date:'2026-03-20',name:'春分の日'},{date:'2026-04-29',name:'昭和の日'},
+  {date:'2026-05-03',name:'憲法記念日'},{date:'2026-05-04',name:'みどりの日'},
+  {date:'2026-05-05',name:'こどもの日'},{date:'2026-07-20',name:'海の日'},
+  {date:'2026-08-11',name:'山の日'},{date:'2026-09-21',name:'敬老の日'},
+  {date:'2026-09-23',name:'秋分の日'},{date:'2026-10-12',name:'スポーツの日'},
+  {date:'2026-11-03',name:'文化の日'},{date:'2026-11-23',name:'勤労感謝の日'}
+];
+
+// ===== AUTH =====
+function showRegister(){
+  document.getElementById('register-area').classList.toggle('hidden');
+}
+
+async function doLogin(){
+  const email = document.getElementById('l-email').value.trim();
+  const pass = document.getElementById('l-pass').value;
+  const err = document.getElementById('login-err');
+  err.classList.add('hidden');
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch(e) {
+    err.textContent = 'ログインに失敗しました。メールとパスワードを確認してください。';
+    err.classList.remove('hidden');
+  }
+}
+
+async function doRegister(){
+  const name = document.getElementById('r-name').value.trim();
+  const email = document.getElementById('r-email').value.trim();
+  const pass = document.getElementById('r-pass').value;
+  const err = document.getElementById('login-err');
+  if(!name||!email||!pass){err.textContent='全項目を入力してください';err.classList.remove('hidden');return;}
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    await cred.user.updateProfile({displayName: name});
+    await db.collection('users').doc(cred.user.uid).set({name, email, role:'staff', createdAt: firebase.firestore.FieldValue.serverTimestamp()});
+  } catch(e) {
+    err.textContent = '登録に失敗しました: ' + e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+async function doLogout(){
+  await auth.signOut();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+auth.onAuthStateChanged(async user => {
+  if(user){
+    currentUser = user;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('user-name').textContent = user.displayName || user.email;
+    // Check admin
+    const userDoc = await db.collection('users').doc(user.uid).get();
+    if(userDoc.exists){
+      const ud = userDoc.data();
+      isAdmin = ud.role === 'admin';
+    }
+    // First user becomes admin
+    const usersSnap = await db.collection('users').get();
+    if(usersSnap.size === 1) {
+      await db.collection('users').doc(user.uid).set({role:'admin'}, {merge:true});
+      isAdmin = true;
+    }
+    document.getElementById('role-badge').textContent = isAdmin ? '管理者' : 'スタッフ';
+    document.querySelectorAll('.admin-only').forEach(el => {
+      if(isAdmin) el.classList.remove('hidden');
+    });
+    await loadAll();
+    showTab('shift');
+  }
+});
+
+// ===== LOAD DATA =====
+async function loadAll(){
+  await loadConfig();
+  await loadHolidays();
+  await loadStaff();
+  await loadShifts();
+  await loadRequests();
+  await loadSwaps();
+  populateSelects();
+}
+
+async function loadConfig(){
+  const doc = await db.collection('config').doc('main').get();
+  if(doc.exists) config = {...config, ...doc.data()};
+  document.getElementById('garden-name').textContent = config.gardenName || 'さくら保育園';
+  if(document.getElementById('cfg-gname')) document.getElementById('cfg-gname').value = config.gardenName || '';
+}
+
+async function loadHolidays(){
+  const snap = await db.collection('holidays').get();
+  if(snap.empty){
+    holidays = [...DEFAULT_HOLIDAYS];
+    const batch = db.batch();
+    holidays.forEach(h => batch.set(db.collection('holidays').doc(h.date), h));
+    await batch.commit();
+  } else {
+    holidays = snap.docs.map(d => d.data());
+  }
+}
+
+async function loadStaff(){
+  const snap = await db.collection('staff').orderBy('order','asc').get();
+  staffList = snap.docs.map(d => ({id:d.id, ...d.data()}));
+}
+
+async function loadShifts(){
+  const y = curYear, m = curMonth;
+  const prefix = `${y}-${String(m+1).padStart(2,'0')}`;
+  const snap = await db.collection('shifts').where('month','==',prefix).get();
+  shifts = {};
+  snap.docs.forEach(d => {
+    const data = d.data();
+    if(!shifts[data.date]) shifts[data.date] = {};
+    shifts[data.date][data.staffId] = data.shift;
+  });
+}
+
+async function loadRequests(){
+  const snap = await db.collection('requests').orderBy('date','asc').get();
+  requests = snap.docs.map(d => ({id:d.id, ...d.data()}));
+}
+
+async function loadSwaps(){
+  const snap = await db.collection('swaps').orderBy('createdAt','desc').get();
+  swapRequests = snap.docs.map(d => ({id:d.id, ...d.data()}));
+}
+
+// ===== HELPERS =====
+function ds(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
+function isHol(date){return holidays.some(h=>h.date===date)}
+function daysInMonth(y,m){return new Date(y,m+1,0).getDate()}
+function staffById(id){return staffList.find(s=>s.id===id)}
+function getShift(date,sid){return (shifts[date]||{})[sid]||null}
+function clsLabel(c){return c==='staff'?'管理/F':CLASSES[parseInt(c)]||c}
+
+async function setShiftDB(date,staffId,shiftVal){
+  const y = parseInt(date.split('-')[0]);
+  const m = parseInt(date.split('-')[1])-1;
+  const prefix = `${y}-${String(m+1).padStart(2,'0')}`;
+  const docId = `${date}_${staffId}`;
+  if(!shifts[date]) shifts[date]={};
+  if(shiftVal===null){
+    delete shifts[date][staffId];
+    await db.collection('shifts').doc(docId).delete();
+  } else {
+    shifts[date][staffId] = shiftVal;
+    await db.collection('shifts').doc(docId).set({date, staffId, shift:shiftVal, month:prefix});
+  }
+}
+
+// ===== TABS =====
+function showTab(t){
+  ['shift','staff','request','swap','settings'].forEach(x=>{
+    document.getElementById('tab-'+x).classList.toggle('hidden', x!==t);
+  });
+  document.querySelectorAll('.tab').forEach((el,i)=>{
+    const tabs=['shift','staff','request','swap','settings'];
+    el.classList.toggle('active', tabs[i]===t);
+  });
+  if(t==='shift') renderShift();
+  if(t==='staff') renderStaff();
+  if(t==='request') renderRequests();
+  if(t==='swap') renderSwaps();
+  if(t==='settings') renderSettings();
+}
+
+function populateSelects(){
+  const rs = document.getElementById('req-staff');
+  const sp = document.getElementById('sw-partner');
+  if(rs) rs.innerHTML = staffList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  if(sp) sp.innerHTML = staffList.filter(s=>s.id!==currentUser?.uid).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+// ===== NAVIGATION =====
+function prevMonth(){curMonth--;if(curMonth<0){curMonth=11;curYear--;}loadShifts().then(renderShift);}
+function nextMonth(){curMonth++;if(curMonth>11){curMonth=0;curYear++;}loadShifts().then(renderShift);}
+
+// ===== AUTO ASSIGN =====
+function canWorkOn(staff, dow){
+  const weekdays = Array.isArray(staff.weekdays) ? staff.weekdays : [1,2,3,4,5,6];
+  // v7: 土曜日は通常人数の半分運用。パート職員は原則休み。
+  if(dow===6 && staff.type==='part') return false;
+  if(dow===6 && staff.saturday==='no') return false;
+  return weekdays.includes(dow);
+}
+function isLicensed(staff){ return (staff.license || 'licensed') === 'licensed'; }
+function isClassCoreStaff(staff){ return isLicensed(staff) && staff.role === 'teacher'; }
+function isWorkingShift(sh){ return sh==='E'||sh==='N'||sh==='L'; }
+function shiftHours(sh){ return isWorkingShift(sh) ? 8 : 0; }
+function targetWorkDays(staff){ return Math.max(1, Math.round((staff.contractHours || (staff.type==='part'?100:160)) / 8)); }
+function canDoShift(staff, sh){
+  if(sh==='E') return ['both','early','early_normal'].includes(staff.shift || 'both');
+  if(sh==='L') return ['both','late'].includes(staff.shift || 'both');
+  if(sh==='N') return ['both','normal','early_normal'].includes(staff.shift || 'both');
+  return false;
+}
+function previousDayShift(staffId, y, m, d){
+  const prev=new Date(y,m,d-1);
+  return getShift(ds(prev.getFullYear(), prev.getMonth(), prev.getDate()), staffId);
+}
+function classTeacherTarget(cls){ return Number(cls) >= 3 && Number(cls) <= 5 ? 3 : 2; }
+function hasRecentSaturday(staffId, y, m, d, maxStreak){
+  if(maxStreak <= 1) maxStreak = 1;
+  let streak = 0;
+  for(let back=7; back<=7*(maxStreak-1); back+=7){
+    const prev = new Date(y, m, d-back);
+    const date = ds(prev.getFullYear(), prev.getMonth(), prev.getDate());
+    const sh = getShift(date, staffId);
+    if(isWorkingShift(sh)) streak++; else break;
+  }
+  return streak >= maxStreak-1;
+}
+function applyCount(counts, staffId, sh, dow){
+  if(!counts[staffId]) counts[staffId]={work:0,early:0,normal:0,late:0,sat:0,hours:0};
+  if(isWorkingShift(sh)){
+    counts[staffId].work++;
+    counts[staffId].hours+=shiftHours(sh);
+    if(dow===6) counts[staffId].sat++;
+  }
+  if(sh==='E') counts[staffId].early++;
+  if(sh==='N') counts[staffId].normal++;
+  if(sh==='L') counts[staffId].late++;
+}
+
+async function autoAssign(){
+  if(!isAdmin) return;
+  const y=curYear, m=curMonth;
+  const days=daysInMonth(y,m);
+  const prefix = `${y}-${String(m+1).padStart(2,'0')}`;
+  const offMap={};
+  requests.forEach(r=>{
+    if(r.date && r.date.startsWith(prefix)){
+      if(!offMap[r.staffId]) offMap[r.staffId]=[];
+      offMap[r.staffId].push(r.date);
+    }
+  });
+
+  const batch = db.batch();
+  const existing = await db.collection('shifts').where('month','==',prefix).get();
+  existing.docs.forEach(d=>batch.delete(d.ref));
+  shifts={};
+
+  const counts={};
+  staffList.forEach(s=>counts[s.id]={work:0,early:0,normal:0,late:0,sat:0,hours:0});
+  const warnings=[];
+
+  const workdaysAll=[];
+  for(let d=1; d<=days; d++){
+    const date=ds(y,m,d);
+    const dow=new Date(y,m,d).getDay();
+    if(dow!==0 && !isHol(date)) workdaysAll.push({d,date,dow});
+  }
+
+  function expectedRatioAt(dayIndex){
+    // 月末まで均等に勤務を残すための進捗率。これで24日以降に職員が消える問題を防ぐ。
+    return Math.min(1, (dayIndex+1) / Math.max(1, workdaysAll.length));
+  }
+
+  const canTake = (s, sh, dow, d, date, workingIds, options={}) => {
+    if(!s || workingIds.has(s.id)) return false;
+    if(shifts[date][s.id]==='O' || shifts[date][s.id]==='H') return false;
+    if(!canWorkOn(s,dow) || !canDoShift(s, sh)) return false;
+    const target = targetWorkDays(s);
+    if(!options.allowOverTarget && (counts[s.id]?.work||0) >= target) return false;
+    const prev = previousDayShift(s.id, y, m, d);
+    if((prev==='L' && sh==='E') || (prev==='E' && sh==='L')) return false;
+    if(dow===6){
+      const maxSat = s.saturdayMax || 2;
+      const maxStreak = s.saturdayStreakMax || 2;
+      if((counts[s.id]?.sat||0) >= maxSat) return false;
+      if(hasRecentSaturday(s.id, y, m, d, maxStreak)) return false;
+    }
+    return true;
+  };
+
+  const choose = (pool, sh, dow, d, date, workingIds, options={}) => {
+    let candidates = pool.filter(s=>canTake(s, sh, dow, d, date, workingIds, options));
+    if(candidates.length===0) return null;
+    const dayIndex = workdaysAll.findIndex(x=>x.date===date);
+    const expected = expectedRatioAt(Math.max(0, dayIndex));
+    return candidates.sort((a,b)=>{
+      const ca=counts[a.id], cb=counts[b.id];
+      const ta=targetWorkDays(a), tb=targetWorkDays(b);
+      const ra=ca.work/ta, rb=cb.work/tb;
+      const pa = sh==='E'?ca.early:(sh==='L'?ca.late:ca.normal);
+      const pb = sh==='E'?cb.early:(sh==='L'?cb.late:cb.normal);
+      const satA = dow===6 ? ca.sat*0.55 : 0;
+      const satB = dow===6 ? cb.sat*0.55 : 0;
+      const corePenaltyA = (sh!=='N' && isClassCoreStaff(a)) ? 0.18 : 0;
+      const corePenaltyB = (sh!=='N' && isClassCoreStaff(b)) ? 0.18 : 0;
+      const specialistBonusA = ((sh==='E' && (a.shift==='early'||a.shift==='early_normal')) || (sh==='L' && a.shift==='late')) ? -0.45 : 0;
+      const specialistBonusB = ((sh==='E' && (b.shift==='early'||b.shift==='early_normal')) || (sh==='L' && b.shift==='late')) ? -0.45 : 0;
+      // 進捗より先に働き過ぎている人を後回し。月後半の空白を防ぐための中心ロジック。
+      const aheadA = Math.max(0, ra - expected) * 3.0;
+      const aheadB = Math.max(0, rb - expected) * 3.0;
+      const scoreA = ra + aheadA + pa*0.18 + satA + corePenaltyA + specialistBonusA;
+      const scoreB = rb + aheadB + pb*0.18 + satB + corePenaltyB + specialistBonusB;
+      return scoreA - scoreB;
+    })[0];
+  };
+
+  for(let d=1; d<=days; d++){
+    const date=ds(y,m,d);
+    const dow=new Date(y,m,d).getDay();
+    const holiday = dow===0 || isHol(date);
+    if(!shifts[date]) shifts[date]={};
+
+    staffList.forEach(s=>{
+      if(holiday) shifts[date][s.id]='H';
+      else if(offMap[s.id]&&offMap[s.id].includes(date)) shifts[date][s.id]='O';
+      else if(!canWorkOn(s,dow)) shifts[date][s.id]='H';
+    });
+    if(holiday) continue;
+
+    const workingIds = new Set();
+    const setWork=(st, sh, options={})=>{
+      if(!st || !canTake(st, sh, dow, d, date, workingIds, options)) return false;
+      shifts[date][st.id]=sh;
+      workingIds.add(st.id);
+      applyCount(counts, st.id, sh, dow);
+      return true;
+    };
+
+    const available = staffList.filter(s=>canWorkOn(s,dow) && !(offMap[s.id]||[]).includes(date));
+    const licensedAvailable = available.filter(isLicensed);
+    const coreTeachers = licensedAvailable.filter(isClassCoreStaff);
+    const support = available.filter(s=>!isClassCoreStaff(s));
+
+    // 早出2名・遅出2名。通常出をメインにする。
+    for(let i=0;i<2;i++){
+      const pick = choose(support.concat(coreTeachers), 'E', dow, d, date, workingIds);
+      if(pick) setWork(pick,'E'); else warnings.push(`${m+1}/${d} 早出不足`);
+    }
+    for(let i=0;i<2;i++){
+      const pick = choose(support.concat(coreTeachers), 'L', dow, d, date, workingIds);
+      if(pick) setWork(pick,'L'); else warnings.push(`${m+1}/${d} 遅出不足`);
+    }
+
+    // 各クラスの担任を最低1名確保。どうしても必要な場合だけ契約時間超過も許可して警告対象にする。
+    [0,1,2,3,4,5].forEach(ci=>{
+      const classTeachers = coreTeachers.filter(s=>String(s.cls)===String(ci));
+      const already = classTeachers.some(s=>workingIds.has(s.id));
+      if(already) return;
+      let pick = choose(classTeachers, 'N', dow, d, date, workingIds);
+      let sh = 'N';
+      if(!pick){ pick = choose(classTeachers, 'E', dow, d, date, workingIds); sh='E'; }
+      if(!pick){ pick = choose(classTeachers, 'L', dow, d, date, workingIds); sh='L'; }
+      // 月後半の担任不在を避ける最終救済
+      if(!pick){ pick = choose(classTeachers, 'N', dow, d, date, workingIds, {allowOverTarget:true}); sh='N'; }
+      if(pick) setWork(pick, sh, {allowOverTarget:true});
+      else warnings.push(`${m+1}/${d} ${CLASSES[ci]} 担任不足`);
+    });
+
+    const fillOne = (pool, options={}) => {
+      let pick = choose(pool, 'N', dow, d, date, workingIds, options);
+      let sh = 'N';
+      if(!pick){ pick = choose(pool, 'E', dow, d, date, workingIds, options); sh='E'; }
+      if(!pick){ pick = choose(pool, 'L', dow, d, date, workingIds, options); sh='L'; }
+      if(!pick) return false;
+      return setWork(pick, sh, options);
+    };
+
+    // 園全体の人数。平日20名目安、土曜は半数=10名。土曜パート休みはcanWorkOnで制御。
+    const minDaily = dow===6 ? Math.min(10, available.length) : Math.min(20, available.length);
+    let guard=0;
+    while(workingIds.size < minDaily && guard++ < 60){
+      const under = available.filter(s => !workingIds.has(s.id) && counts[s.id].work < targetWorkDays(s));
+      if(!fillOne(under)) break;
+    }
+    // それでも不足するときだけ、契約時間超過を許して必要人数を確保。
+    guard=0;
+    while(workingIds.size < minDaily && guard++ < 30){
+      const any = available.filter(s => !workingIds.has(s.id));
+      if(!fillOne(any, {allowOverTarget:true})) break;
+    }
+
+    staffList.forEach(s=>{ if(!shifts[date][s.id]) shifts[date][s.id]='H'; });
+  }
+
+  Object.entries(shifts).forEach(([date, byStaff])=>{
+    Object.entries(byStaff).forEach(([staffId, sh])=>{
+      batch.set(db.collection('shifts').doc(`${date}_${staffId}`),{date,staffId,shift:sh,month:prefix});
+    });
+  });
+  await batch.commit();
+
+  const msg = warnings.length ? `自動生成しました。要確認: ${warnings.slice(0,8).join(' / ')}${warnings.length>8?' ほか':''}` : 'v8: 月末まで職員を均等配置し、土曜半数・パート休み・担任最低1名を守って生成しました。';
+  alert(msg);
+  renderShift();
+}
+
+async function seedSampleStaff(){
+  if(!isAdmin) return;
+  if(staffList.length>0){
+    if(!confirm('既存の職員データを削除して、v6サンプル30人に入れ替えますか？')) return;
+    const oldSnap = await db.collection('staff').get();
+    const delBatch = db.batch();
+    oldSnap.docs.forEach(d=>delBatch.delete(d.ref));
+    await delBatch.commit();
+    staffList=[];
+  }
+
+  // v6 サンプル構成
+  // 正職員18名 + 再雇用2名 + パート10名 = 30名
+  // 再雇用は正職員と同じ契約時間・同じシフト対象。違いは雇用区分表示のみ。
+  // 3〜5歳児は将来の3担任体制を想定して担任を3名登録。
+  const samples = [
+    // 0歳児：担任2名
+    {name:'青木先生',cls:'0',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'井上先生',cls:'0',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    // 1歳児：担任2名
+    {name:'上田先生',cls:'1',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'遠藤先生',cls:'1',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    // 2歳児：担任2名
+    {name:'大谷先生',cls:'2',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'岡田先生',cls:'2',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'no',saturdayMax:0},
+    // 3歳児：担任3名体制
+    {name:'加藤先生',cls:'3',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'木村先生',cls:'3',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'田中先生',cls:'3',type:'full',role:'teacher',shift:'early_normal',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    // 4歳児：担任3名体制
+    {name:'小林先生',cls:'4',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'佐藤先生',cls:'4',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'中村先生',cls:'4',type:'full',role:'teacher',shift:'early_normal',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    // 5歳児：担任3名体制
+    {name:'鈴木先生',cls:'5',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'高橋先生',cls:'5',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'西田先生',cls:'5',type:'full',role:'teacher',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    // フリー正職員
+    {name:'野口先生',cls:'staff',type:'full',role:'support',shift:'both',contractHours:160,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'橋本先生',cls:'staff',type:'full',role:'support',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'林先生',cls:'staff',type:'full',role:'support',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    // 再雇用：正職員と同じ160h・早/通/遅すべて可・土曜可。フリー1名として不足時に補完。
+    {name:'藤田先生',cls:'staff',type:'reemploy',role:'support',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    {name:'松本先生',cls:'staff',type:'reemploy',role:'support',shift:'both',contractHours:160,license:'licensed',saturday:'yes',saturdayMax:2},
+    // パート10名：うち早出専門1名・遅出専門1名、資格なし補助も含む
+    {name:'渡辺先生',cls:'0',type:'part',role:'support',shift:'early',contractHours:80,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'石川先生',cls:'1',type:'part',role:'support',shift:'late',contractHours:80,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'森先生',cls:'2',type:'part',role:'support',shift:'both',contractHours:120,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'山口先生',cls:'3',type:'part',role:'support',shift:'both',contractHours:120,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'山田先生',cls:'4',type:'part',role:'support',shift:'normal',contractHours:100,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'吉田先生',cls:'5',type:'part',role:'support',shift:'both',contractHours:120,license:'licensed',saturday:'no',saturdayMax:0},
+    {name:'前田先生',cls:'2',type:'part',role:'support',shift:'normal',contractHours:80,license:'support',saturday:'no',saturdayMax:0},
+    {name:'清水先生',cls:'3',type:'part',role:'support',shift:'early_normal',contractHours:80,license:'support',saturday:'no',saturdayMax:0},
+    {name:'池田先生',cls:'4',type:'part',role:'support',shift:'normal',contractHours:80,license:'support',saturday:'no',saturdayMax:0},
+    {name:'長谷川先生',cls:'5',type:'part',role:'support',shift:'both',contractHours:100,license:'support',saturday:'no',saturdayMax:0},
+  ];  const batch=db.batch();
+  samples.forEach((st,i)=>{
+    const weekdays = st.saturday==='yes' ? [1,2,3,4,5,6] : [1,2,3,4,5];
+    const ref=db.collection('staff').doc();
+    batch.set(ref,{...st,email:'',saturdayStreakMax:2,weekdays,order:i,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  });
+  await batch.commit();
+  await loadStaff();
+  populateSelects();
+  renderStaff();
+  alert('v6サンプル30人に入れ替えました。再雇用2名、早出＋通常のみ2名、早出専門パート1名、遅出専門パート1名を含みます。');
+}
+
+// ===== RENDER SHIFT =====
+function maxConsecutiveSaturdays(staffId,y,m){
+  let max=0, cur=0;
+  const days=daysInMonth(y,m);
+  for(let d=1; d<=days; d++){
+    if(new Date(y,m,d).getDay()!==6) continue;
+    const sh=getShift(ds(y,m,d), staffId);
+    if(isWorkingShift(sh)){cur++; max=Math.max(max,cur);} else cur=0;
+  }
+  return max;
+}
+
+function renderShift(){
+  const y=curYear, m=curMonth;
+  document.getElementById('month-label').textContent=`${y}年${m+1}月`;
+  const days=daysInMonth(y,m);
+  const filter=document.getElementById('cls-filter')?.value||'all';
+  let disp=staffList;
+  if(filter!=='all') disp=staffList.filter(s=>s.cls===filter);
+
+  let totalE=0,totalN=0,totalL=0,totalO=0;
+  for(let d=1;d<=days;d++){
+    const date=ds(y,m,d);
+    disp.forEach(s=>{
+      const sh=getShift(date,s.id);
+      if(sh==='E')totalE++;
+      else if(sh==='N')totalN++;
+      else if(sh==='L')totalL++;
+      else if(sh==='O')totalO++;
+    });
+  }
+  let fairness=[];
+  disp.forEach(s=>{
+    let work=0,hours=0,sat=0;
+    for(let d=1;d<=days;d++){ const date=ds(y,m,d); const sh=getShift(date,s.id); if(isWorkingShift(sh)){work++;hours+=shiftHours(sh);if(new Date(y,m,d).getDay()===6)sat++;} }
+    const target=targetWorkDays(s); fairness.push({name:s.name, diff:work-target, hours, targetHours:s.contractHours||160, sat});
+  });
+  const over=fairness.filter(x=>x.diff>2).length;
+  const under=fairness.filter(x=>x.diff<-2).length;
+  document.getElementById('shift-stats').innerHTML=`
+    <div class="stat"><div class="stat-n">${totalN}</div><div class="stat-l">通常延べ</div></div>
+    <div class="stat"><div class="stat-n">${totalE}</div><div class="stat-l">早出延べ</div></div>
+    <div class="stat"><div class="stat-n">${totalL}</div><div class="stat-l">遅出延べ</div></div>
+    <div class="stat"><div class="stat-n">${totalO}</div><div class="stat-l">希望休延べ</div></div>
+    <div class="stat"><div class="stat-n">${disp.length}</div><div class="stat-l">表示人数</div></div>
+    <div class="stat"><div class="stat-n">${over}/${under}</div><div class="stat-l">多め/少なめ</div></div>`;
+
+  // Conflict check
+  let conflicts=[];
+  for(let d=1;d<=days;d++){
+    const date=ds(y,m,d);
+    const dow=new Date(y,m,d).getDay();
+    if(dow===0||dow===6||isHol(date)) continue;
+    [0,1,2,3,4,5].forEach(ci=>{
+      const teachers=staffList.filter(s=>s.cls==ci&&isClassCoreStaff(s));
+      const working=teachers.filter(s=>{const sh=getShift(date,s.id);return isWorkingShift(sh);});
+      if(working.length===0&&teachers.length>0) conflicts.push(`${m+1}/${d} ${CLASSES[ci]}担任不在`);
+    });
+  }
+  const ca=document.getElementById('shift-alerts');
+  const hourWarnings=[];
+  if(Object.keys(shifts).length>0){
+    disp.forEach(s=>{
+      let hours=0, sat=0;
+      for(let d=1;d<=days;d++){const date=ds(y,m,d);const sh=getShift(date,s.id);if(isWorkingShift(sh)){hours+=shiftHours(sh);if(new Date(y,m,d).getDay()===6)sat++;}}
+      const target=s.contractHours||160;
+      if(hours > target + 16) hourWarnings.push(`${s.name} 勤務多め(${hours}/${target}h)`);
+      if(sat > (s.saturdayMax||2)) hourWarnings.push(`${s.name} 土曜多め(${sat}回)`);
+      if(maxConsecutiveSaturdays(s.id,y,m) > (s.saturdayStreakMax||2)) hourWarnings.push(`${s.name} 土曜連続超過`);
+    });
+  }
+  if(conflicts.length>0 || hourWarnings.length>0){
+    const all=conflicts.concat(hourWarnings);
+    ca.innerHTML=`<div class="alert alert-warn">⚠️ ${all.slice(0,6).join('　')}${all.length>6?` 他${all.length-6}件`:''}</div>`;
+  } else if(Object.keys(shifts).length>0){
+    ca.innerHTML=`<div class="alert alert-ok">✅ シフトの問題はありません。契約時間・土曜回数も試作ルール内です。</div>`;
+  } else {
+    ca.innerHTML=`<div class="alert alert-info">ℹ️ まだシフトが生成されていません。管理者が「自動生成」ボタンで作成できます。</div>`;
+  }
+
+  // Table
+  let html='<thead><tr>';
+  html+=`<th class="sname">氏名</th><th class="scls">クラス</th>`;
+  for(let d=1;d<=days;d++){
+    const dow=new Date(y,m,d).getDay();
+    const date=ds(y,m,d);
+    const isH=dow===0||isHol(date);
+    const isSat=dow===6;
+    const cls=isH?'sun':isSat?'sat':'';
+    html+=`<th class="${cls}">${d}<br><span style="font-size:9px">${isH&&isHol(date)?'祝':DOW[dow]}</span></th>`;
+  }
+  html+='<th>通</th><th>早</th><th>遅</th><th>休</th><th>時間</th><th>土</th></tr></thead><tbody>';
+
+  disp.forEach(s=>{
+    const typeB=s.type==='part'?'<span class="badge b-part" style="font-size:9px">P</span>':(s.type==='reemploy'?'<span class="badge b-reemp" style="font-size:9px">再</span>':'');
+    html+=`<tr><td class="sname">${s.name}${typeB}</td>`;
+    html+=`<td class="scls"><span class="badge b-cls">${clsLabel(s.cls)}</span></td>`;
+    let nc=0,ec=0,lc=0,oc=0,hc=0,scnt=0;
+    for(let d=1;d<=days;d++){
+      const date=ds(y,m,d);
+      const dow=new Date(y,m,d).getDay();
+      const isH=dow===0||isHol(date);
+      const isSat=dow===6;
+      const cellCls=isH?'sun':isSat?'sat':'';
+      const sh=getShift(date,s.id);
+      let inner='';
+      if(sh==='E'){inner=`<span class="sc se">早</span>`;ec++;hc+=shiftHours(sh);if(dow===6)scnt++;}
+      else if(sh==='N'){inner=`<span class="sc sn">通</span>`;nc++;hc+=shiftHours(sh);if(dow===6)scnt++;}
+      else if(sh==='L'){inner=`<span class="sc sl">遅</span>`;lc++;hc+=shiftHours(sh);if(dow===6)scnt++;}
+      else if(sh==='O'){inner=`<span class="sc so">休</span>`;oc++;}
+      else if(sh==='H'){inner=`<span class="sc sh">－</span>`;}
+      else inner=`<span style="font-size:9px;color:#ccc">―</span>`;
+      const clickHandler=isAdmin&&!isH?`onclick="cycleShift('${date}','${s.id}')"` :'';
+      html+=`<td class="${cellCls}" ${clickHandler}>${inner}</td>`;
+    }
+    html+=`<td>${nc}</td><td>${ec}</td><td>${lc}</td><td>${oc}</td><td>${hc}/${s.contractHours||160}</td><td>${scnt}/${s.saturdayMax||2}</td></tr>`;
+  });
+  html+='</tbody>';
+  document.getElementById('shift-table').innerHTML=html;
+}
+
+async function cycleShift(date,staffId){
+  if(!isAdmin) return;
+  const s=staffById(staffId);
+  if(!s) return;
+  const cur=getShift(date,staffId)||'';
+  const seq=s.shift==='early'?['E','O','H']:s.shift==='late'?['L','O','H']:s.shift==='normal'?['N','O','H']:['N','E','L','O','H'];
+  const next=seq[(seq.indexOf(cur)+1)%seq.length];
+  await setShiftDB(date,staffId,next);
+  renderShift();
+}
+
+// ===== STAFF =====
+async function addStaff(){
+  const name=document.getElementById('s-name').value.trim();
+  if(!name){alert('氏名を入力してください');return;}
+  const s={
+    name,
+    cls:document.getElementById('s-cls').value,
+    type:document.getElementById('s-type').value,
+    role:document.getElementById('s-role').value,
+    shift:document.getElementById('s-shift').value,
+    email:document.getElementById('s-email').value.trim(),
+    contractHours:Number(document.getElementById('s-hours').value||160),
+    saturday:document.getElementById('s-sat').value,
+    saturdayMax:Number(document.getElementById('s-satmax').value||0),
+    saturdayStreakMax:Number(document.getElementById('s-satstreak').value||2),
+    license:document.getElementById('s-license').value,
+    weekdays:document.getElementById('s-weekdays').value.split(',').map(x=>Number(x.trim())).filter(Boolean),
+    order:staffList.length,
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  };
+  const ref = await db.collection('staff').add(s);
+  staffList.push({id:ref.id,...s});
+  document.getElementById('s-name').value='';
+  document.getElementById('s-email').value='';
+  document.getElementById('s-hours').value = document.getElementById('s-type').value==='part' ? 100 : 160;
+  populateSelects();
+  renderStaff();
+}
+
+async function removeStaff(id){
+  if(!confirm('この職員を削除しますか？')) return;
+  await db.collection('staff').doc(id).delete();
+  staffList=staffList.filter(s=>s.id!==id);
+  populateSelects();
+  renderStaff();
+}
+
+function renderStaff(){
+  const ROLES={teacher:'担任',sub:'副担任',director:'主任',support:'補助'};
+  const SHIFTS={both:'通・早・遅可',normal:'通常のみ',early:'早出専門',late:'遅出専門',early_normal:'早＋通のみ'};
+  let html='';
+  const grouped={};
+  staffList.forEach(s=>{
+    if(!grouped[s.cls]) grouped[s.cls]=[];
+    grouped[s.cls].push(s);
+  });
+  [...Array(6).keys()].map(String).concat(['staff']).forEach(cls=>{
+    const members=grouped[cls]||[];
+    if(members.length===0) return;
+    html+=`<div class="card"><div class="card-title">${cls==='staff'?'フリー・管理':CLASSES[parseInt(cls)]+'クラス'}</div>`;
+    members.forEach(s=>{
+      html+=`<div class="staff-item">
+        <span style="font-weight:500;min-width:90px">${s.name}</span>
+        <span class="badge ${s.type==='part'?'b-part':(s.type==='reemploy'?'b-reemp':'b-full')}">${s.type==='part'?'パート':(s.type==='reemploy'?'再雇用':'正職員')}</span>
+        <span class="badge ${isLicensed(s)?'b-cls':'b-hol'}">${isLicensed(s)?'保育士':'補助'}</span>
+        <span class="badge b-hol">${ROLES[s.role]||s.role}</span>
+        <span class="badge b-early">${SHIFTS[s.shift]}</span>
+        <span class="badge b-hol">月${s.contractHours||160}h</span>
+        <span class="badge ${s.saturday==='no'?'b-off':'b-part'}">土曜${s.saturday==='no'?'不可':'可'}・連続${s.saturdayStreakMax||2}週まで</span>
+        ${s.email?`<span style="font-size:11px;color:var(--muted)">${s.email}</span>`:''}
+        ${isAdmin?`<button class="btn btn-sm btn-red" onclick="removeStaff('${s.id}')">削除</button>`:''}
+      </div>`;
+    });
+    html+='</div>';
+  });
+  if(!html) html='<div class="alert alert-info">職員が登録されていません。上のフォームから追加してください。</div>';
+  document.getElementById('staff-list').innerHTML=html;
+}
+
+// ===== REQUESTS =====
+async function addRequest(){
+  const staffId=document.getElementById('req-staff').value;
+  const date=document.getElementById('req-date').value;
+  const note=document.getElementById('req-note').value;
+  if(!date){alert('日付を選択してください');return;}
+  const exists=requests.find(r=>r.staffId===staffId&&r.date===date);
+  if(exists){alert('同じ日付がすでに登録されています');return;}
+  const r={staffId,date,note,createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:currentUser.uid};
+  const ref=await db.collection('requests').add(r);
+  requests.push({id:ref.id,...r});
+  document.getElementById('req-date').value='';
+  document.getElementById('req-note').value='';
+  renderRequests();
+}
+
+async function removeRequest(id){
+  await db.collection('requests').doc(id).delete();
+  requests=requests.filter(r=>r.id!==id);
+  renderRequests();
+}
+
+function renderRequests(){
+  const byStaff={};
+  requests.forEach(r=>{if(!byStaff[r.staffId])byStaff[r.staffId]=[];byStaff[r.staffId].push(r);});
+  let html='';
+  Object.entries(byStaff).forEach(([sid,reqs])=>{
+    const s=staffById(sid);
+    if(!s) return;
+    html+=`<div class="card"><div class="card-title">${s.name}（${clsLabel(s.cls)}）</div><div style="display:flex;flex-wrap:wrap;gap:8px">`;
+    reqs.sort((a,b)=>a.date>b.date?1:-1).forEach(r=>{
+      html+=`<span class="badge b-off" style="cursor:pointer" onclick="removeRequest('${r.id}')" title="${r.note||''}クリックで削除">${r.date} ${r.note?'('+r.note+')':''} ✕</span>`;
+    });
+    html+='</div></div>';
+  });
+  if(!html) html='<div class="alert alert-info">希望休の登録がありません。</div>';
+  document.getElementById('request-list').innerHTML=html;
+}
+
+// ===== SWAP =====
+async function submitSwap(){
+  const myDate=document.getElementById('sw-mydate').value;
+  const partnerId=document.getElementById('sw-partner').value;
+  const partDate=document.getElementById('sw-partdate').value;
+  const reason=document.getElementById('sw-reason').value;
+  if(!myDate||!partDate||!partnerId){alert('全項目を入力してください');return;}
+  const partner=staffById(partnerId);
+  // Find current user's staff record by email
+  const myStaff=staffList.find(s=>s.email===currentUser.email);
+  const swap={
+    requesterId:currentUser.uid,
+    requesterName:currentUser.displayName||currentUser.email,
+    requesterStaffId:myStaff?.id||'',
+    myDate,
+    partnerId,
+    partnerName:partner?.name||'',
+    partDate,
+    reason,
+    status:'pending',
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  };
+  const ref=await db.collection('swaps').add(swap);
+  swapRequests.unshift({id:ref.id,...swap});
+  document.getElementById('sw-mydate').value='';
+  document.getElementById('sw-partdate').value='';
+  document.getElementById('sw-reason').value='';
+  renderSwaps();
+}
+
+async function approveSwap(id){
+  const sw=swapRequests.find(s=>s.id===id);
+  if(!sw) return;
+  // Swap shifts
+  const myStaff=sw.requesterStaffId;
+  const partStaff=sw.partnerId;
+  const myShift=getShift(sw.myDate,myStaff);
+  const partShift=getShift(sw.partDate,partStaff);
+  if(myShift) await setShiftDB(sw.myDate,partStaff,myShift);
+  if(partShift) await setShiftDB(sw.partDate,myStaff,partShift);
+  // Also swap own
+  if(partShift) await setShiftDB(sw.myDate,myStaff,partShift);
+  if(myShift) await setShiftDB(sw.partDate,partStaff,myShift);
+  await db.collection('swaps').doc(id).update({status:'approved'});
+  sw.status='approved';
+  renderSwaps();
+  if(document.getElementById('tab-shift').classList.contains('hidden')===false) renderShift();
+}
+
+async function rejectSwap(id){
+  await db.collection('swaps').doc(id).update({status:'rejected'});
+  const sw=swapRequests.find(s=>s.id===id);
+  if(sw) sw.status='rejected';
+  renderSwaps();
+}
+
+function renderSwaps(){
+  let html='';
+  swapRequests.slice(0,30).forEach(sw=>{
+    const stCls={pending:'ss-pending',approved:'ss-approved',rejected:'ss-rejected'}[sw.status]||'ss-pending';
+    const stLbl={pending:'承認待ち',approved:'承認済',rejected:'却下'}[sw.status]||sw.status;
+    html+=`<div class="swap-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div>
+          <strong>${sw.requesterName}</strong> の <strong>${sw.myDate}</strong> ↔
+          <strong>${sw.partnerName}</strong> の <strong>${sw.partDate}</strong>
+          ${sw.reason?`<span style="font-size:11px;color:var(--muted)">（${sw.reason}）</span>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="swap-status ${stCls}">${stLbl}</span>
+          ${isAdmin&&sw.status==='pending'?`
+            <button class="btn btn-sm btn-green" onclick="approveSwap('${sw.id}')">承認</button>
+            <button class="btn btn-sm btn-red" onclick="rejectSwap('${sw.id}')">却下</button>
+          `:''}
+        </div>
+      </div>
+    </div>`;
+  });
+  if(!html) html='<div class="alert alert-info">シフト交換の申請はありません。</div>';
+  document.getElementById('swap-list').innerHTML=html;
+}
+
+// ===== SETTINGS =====
+async function saveConfig(){
+  const name=document.getElementById('cfg-gname').value;
+  config.gardenName=name;
+  await db.collection('config').doc('main').set(config,{merge:true});
+  document.getElementById('garden-name').textContent=name;
+  alert('設定を保存しました');
+}
+
+async function addHoliday(){
+  const date=document.getElementById('hol-date').value;
+  const name=document.getElementById('hol-name').value||'祝日';
+  if(!date) return;
+  if(!holidays.find(h=>h.date===date)){
+    holidays.push({date,name});
+    await db.collection('holidays').doc(date).set({date,name});
+  }
+  renderSettings();
+}
+
+async function removeHoliday(date){
+  holidays=holidays.filter(h=>h.date!==date);
+  await db.collection('holidays').doc(date).delete();
+  renderSettings();
+}
+
+function renderSettings(){
+  const y=curYear;
+  const rel=holidays.filter(h=>h.date.startsWith(y)||h.date.startsWith(y+1));
+  let html='';
+  rel.sort((a,b)=>a.date>b.date?1:-1).forEach(h=>{
+    html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="min-width:90px;font-size:12px">${h.date}</span>
+      <span style="flex:1;font-size:12px">${h.name}</span>
+      <button class="btn btn-sm btn-red" onclick="removeHoliday('${h.date}')">削除</button>
+    </div>`;
+  });
+  document.getElementById('holiday-list').innerHTML=html||'<p style="font-size:12px;color:var(--muted)">祝日データなし</p>';
+}
+
+// ===== EXCEL EXPORT =====
+function exportExcel(){
+  const y=curYear, m=curMonth;
+  const days=daysInMonth(y,m);
+  const filter=document.getElementById('cls-filter')?.value||'all';
+  let disp=staffList;
+  if(filter!=='all') disp=staffList.filter(s=>s.cls===filter);
+
+  const header=['氏名','クラス','種別','保育士資格'];
+  for(let d=1;d<=days;d++) header.push(`${d}日`);
+  header.push('早出','遅出','希望休','勤務時間/契約時間','土曜回数/上限');
+
+  const rows=[header];
+  disp.forEach(s=>{
+    const row=[s.name, clsLabel(s.cls), s.type==='part'?'パート':(s.type==='reemploy'?'再雇用':'正職員'), isLicensed(s)?'あり':'なし'];
+    let nc=0,ec=0,lc=0,oc=0,hc=0,scnt=0;
+    for(let d=1;d<=days;d++){
+      const date=ds(y,m,d);
+      const sh=getShift(date,s.id)||'';
+      const lbl={E:'早',L:'遅',O:'休',H:'－'}[sh]||'';
+      row.push(lbl);
+      if(sh==='E'){ec++;hc+=8;if(new Date(y,m,d).getDay()===6)scnt++;}else if(sh==='L'){lc++;hc+=8;if(new Date(y,m,d).getDay()===6)scnt++;}else if(sh==='O')oc++;
+    }
+    row.push(ec,lc,oc,`${hc}/${s.contractHours||160}`,`${scnt}/${s.saturdayMax||2}`);
+    rows.push(row);
+  });
+
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,`${y}年${m+1}月`);
+  XLSX.writeFile(wb,`シフト表_${y}年${m+1}月.xlsx`);
+}
+</script>
+</body>
+</html>
